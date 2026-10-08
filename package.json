@@ -1,0 +1,15 @@
+{
+  "name": "localstore",
+  "version": "1.0.0",
+  "description": "LocalStore: tienda en línea con buscador (Node + Express + SQLite)",
+  "main": "server.js",
+  "scripts": {
+    "seed": "node db/seed.js",
+    "images": "node scripts/download-images.js",
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=22.13" },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}

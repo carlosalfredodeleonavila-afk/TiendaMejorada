@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LocalStore — Tu tienda de barrio, en línea</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===================== SKIP LINK (accesibilidad) ===================== -->
+<a href="#contenido" class="skip-link">Saltar al contenido</a>
+
+<!-- ===================== HEADER ===================== -->
+<header class="header" role="banner">
+  <div class="header__top">
+    <button class="menu-toggle" id="menuToggle" aria-label="Abrir menú de categorías" aria-expanded="false" aria-controls="categoryDrawer">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
+
+    <a href="#contenido" class="logo" aria-label="LocalStore, ir al inicio">
+      <svg width="30" height="30" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <path d="M8 16L12 8H36L40 16" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M8 16H40V36C40 37.1 39.1 38 38 38H10C8.9 38 8 37.1 8 36V16Z" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>
+        <path d="M17 22C17 25.87 20.13 29 24 29C27.87 29 31 25.87 31 22" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span class="logo__text">Local<em>Store</em></span>
+    </a>
+
+    <form class="search" id="searchForm" role="search">
+      <label for="searchInput" class="sr-only">Buscar productos</label>
+      <input type="search" id="searchInput" placeholder="Busca audífonos, tenis, cafeteras…" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="suggestBox" aria-expanded="false">
+      <button type="submit" aria-label="Buscar">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
+      <ul class="suggest" id="suggestBox" role="listbox" aria-label="Sugerencias de búsqueda" hidden></ul>
+    </form>
+
+    <div class="header__actions">
+      <button class="icon-btn" id="loginBtn" aria-haspopup="dialog" aria-controls="loginModal">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span id="loginLabel">Iniciar sesión</span>
+      </button>
+
+      <button class="icon-btn" id="logoutBtn" hidden title="Cerrar sesión">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Cerrar sesión</span>
+      </button>
+
+      <button class="icon-btn cart-btn" id="cartToggle" aria-haspopup="dialog" aria-controls="cartDrawer" aria-label="Abrir carrito de compras">
+        <svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="21" r="1.4"/><circle cx="19" cy="21" r="1.4"/>
+          <path d="M2.5 3h2.4l2.5 12.4a2 2 0 0 0 2 1.6h8.3a2 2 0 0 0 2-1.6l1.6-8.4H6"/>
+        </svg>
+        <span>Carrito</span>
+        <span class="cart-badge" id="cartBadge">0</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Barra de categorías -->
+  <nav class="category-bar" aria-label="Categorías de productos">
+    <ul id="categoryList"></ul>
+  </nav>
+</header>
+
+<!-- Aviso de estado (heurística: visibilidad del estado del sistema) -->
+<div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+
+<!-- ===================== CONTENIDO ===================== -->
+<main id="contenido" class="layout">
+
+  <!-- ---------- FILTROS ---------- -->
+  <aside class="filters" aria-label="Filtrar productos">
+    <div class="filters__header">
+      <h2>Filtros</h2>
+      <button id="clearFilters" class="link-btn">Quitar filtros</button>
+    </div>
+
+    <fieldset class="filter-group">
+      <legend>Categoría</legend>
+      <div id="categoryFilters" class="filter-options"></div>
+    </fieldset>
+
+    <fieldset class="filter-group">
+      <legend>Disponibilidad</legend>
+      <label class="checkbox-row">
+        <input type="checkbox" id="onlyStock">
+        <span>Solo productos en existencia</span>
+      </label>
+    </fieldset>
+
+    <fieldset class="filter-group">
+      <legend>Precio máximo: <output id="priceOutput">$20,000</output></legend>
+      <input type="range" id="priceRange" min="0" max="20000" step="100" value="20000" aria-describedby="priceOutput">
+    </fieldset>
+
+    <fieldset class="filter-group">
+      <legend>Calificación mínima</legend>
+      <div id="ratingFilters" class="filter-options"></div>
+    </fieldset>
+
+    <fieldset class="filter-group">
+      <legend>Ordenar por</legend>
+      <select id="sortSelect">
+        <option value="relevance">Relevancia</option>
+        <option value="price-asc">Precio: menor a mayor</option>
+        <option value="price-desc">Precio: mayor a menor</option>
+        <option value="rating-desc">Mejor calificados</option>
+      </select>
+    </fieldset>
+  </aside>
+
+  <!-- ---------- PRODUCTOS ---------- -->
+  <section class="products" aria-label="Resultados de productos">
+    <div class="products__header">
+      <p id="resultsCount" aria-live="polite">Cargando productos…</p>
+      <p id="didYouMean" class="did-you-mean" hidden></p>
+    </div>
+    <div class="product-grid" id="productGrid"></div>
+    <div class="load-more-wrap"><button class="btn btn--secondary" id="loadMore" hidden>Cargar más productos</button></div>
+    <div class="empty-state" id="emptyState" hidden></div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="site-footer__inner">
+    <p>© 2026 LocalStore — Compras rápidas, cerca de ti.</p>
+    <button id="helpBtn" class="link-btn">¿Cómo funciona esta tienda?</button>
+  </div>
+</footer>
+
+<!-- ===================== CARRITO (panel lateral) ===================== -->
+<div class="overlay" id="cartOverlay" hidden></div>
+<aside class="cart-drawer" id="cartDrawer" role="dialog" aria-modal="true" aria-labelledby="cartTitle" hidden>
+  <div class="cart-drawer__header">
+    <h2 id="cartTitle">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="9" cy="21" r="1.4"/><circle cx="19" cy="21" r="1.4"/>
+        <path d="M2.5 3h2.4l2.5 12.4a2 2 0 0 0 2 1.6h8.3a2 2 0 0 0 2-1.6l1.6-8.4H6"/>
+      </svg>
+      Tu carrito
+    </h2>
+    <button class="icon-btn-plain" id="closeCart" aria-label="Cerrar carrito">✕</button>
+  </div>
+
+  <div class="cart-drawer__body" id="cartBody">
+    <!-- se llena por JS -->
+  </div>
+
+  <div class="cart-drawer__footer">
+    <div class="cart-total-row">
+      <span>Subtotal</span>
+      <strong id="cartSubtotal">$0.00</strong>
+    </div>
+    <p class="cart-hint">Envío e impuestos se calculan al finalizar la compra.</p>
+    <button class="btn btn--primary btn--full" id="checkoutBtn">Finalizar compra</button>
+    <button class="link-btn" id="clearCartBtn">Vaciar carrito</button>
+  </div>
+</aside>
+
+<!-- ===================== MODAL: INICIAR SESIÓN / REGISTRO ===================== -->
+<div class="overlay" id="loginOverlay" hidden></div>
+<div class="modal" id="loginModal" role="dialog" aria-modal="true" aria-labelledby="loginModalTitle" hidden>
+  <button class="icon-btn-plain modal__close" id="closeLogin" aria-label="Cerrar">✕</button>
+  <h2 id="loginModalTitle">Inicia sesión</h2>
+  <p class="modal__subtitle">Guarda tu domicilio para calcular envíos y agilizar tus compras.</p>
+
+  <form id="loginForm" novalidate>
+    <div class="form-row">
+      <label for="fullName">Nombre completo</label>
+      <input type="text" id="fullName" name="fullName" required autocomplete="name">
+      <span class="error-msg" id="err-fullName"></span>
+    </div>
+
+    <div class="form-row">
+      <label for="email">Correo electrónico</label>
+      <input type="email" id="email" name="email" required autocomplete="email">
+      <span class="error-msg" id="err-email"></span>
+    </div>
+
+    <div class="form-row">
+      <label for="phone">Teléfono</label>
+      <input type="tel" id="phone" name="phone" required autocomplete="tel" placeholder="10 dígitos">
+      <span class="error-msg" id="err-phone"></span>
+    </div>
+
+    <h3 class="form-section-title">Domicilio de envío</h3>
+
+    <div class="form-row">
+      <label for="street">Calle y número</label>
+      <input type="text" id="street" name="street" required autocomplete="street-address">
+      <span class="error-msg" id="err-street"></span>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-row">
+        <label for="neighborhood">Colonia</label>
+        <input type="text" id="neighborhood" name="neighborhood" required>
+        <span class="error-msg" id="err-neighborhood"></span>
+      </div>
+      <div class="form-row">
+        <label for="zip">Código postal</label>
+        <input type="text" id="zip" name="zip" required inputmode="numeric" placeholder="87000">
+        <span class="error-msg" id="err-zip"></span>
+      </div>
+    </div>
+
+    <div class="form-grid">
+      <div class="form-row">
+        <label for="city">Ciudad</label>
+        <input type="text" id="city" name="city" required autocomplete="address-level2">
+        <span class="error-msg" id="err-city"></span>
+      </div>
+      <div class="form-row">
+        <label for="state">Estado</label>
+        <input type="text" id="state" name="state" required autocomplete="address-level1">
+        <span class="error-msg" id="err-state"></span>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <label for="references">Referencias (opcional)</label>
+      <input type="text" id="references" name="references" placeholder="Entre calles, color de fachada…">
+    </div>
+
+    <button type="submit" class="btn btn--primary btn--full">Guardar y entrar</button>
+    <p class="form-note">Esta información no se comparte con nadie, esta segura con nosotros.</p>
+  </form>
+</div>
+
+<!-- ===================== MODAL: DETALLE DE PRODUCTO + RESEÑAS ===================== -->
+<div class="overlay" id="productOverlay" hidden></div>
+<div class="modal modal--product" id="productModal" role="dialog" aria-modal="true" aria-labelledby="productModalTitle" hidden>
+  <button class="icon-btn-plain modal__close" id="closeProduct" aria-label="Cerrar">✕</button>
+  <div id="productModalContent"><!-- se llena por JS --></div>
+</div>
+
+<div class="overlay" id="categoryOverlay" hidden></div>
+<aside class="category-drawer" id="categoryDrawer" role="dialog" aria-modal="true" aria-label="Categorías" hidden>
+  <div class="cart-drawer__header">
+    <h2>Categorías</h2>
+    <button class="icon-btn-plain" id="closeCategoryDrawer" aria-label="Cerrar">✕</button>
+  </div>
+  <ul id="categoryListMobile" class="category-drawer__list"></ul>
+</aside>
+
+<script src="script.js"></script>
+</body>
+</html>
