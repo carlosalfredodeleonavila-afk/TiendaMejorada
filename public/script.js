@@ -7,6 +7,10 @@ const MAX_PRICE = 20000;
 const IMG_FALLBACK = "data:image/svg+xml;utf8," + encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='500' height='375'><rect width='100%' height='100%' fill='#F3EBDA'/><text x='50%' y='50%' fill='#635A4C' font-family='sans-serif' font-size='18' text-anchor='middle'>Imagen no disponible</text></svg>");
 const IMG_ERR = `onerror="this.onerror=null;this.src=IMG_FALLBACK"`;
 const $ = id => document.getElementById(id);
+const COLOR_HEX = { "Negro":"#1d1d1f", "Blanco":"#f6f6f4", "Gris":"#8b9096", "Azul":"#2f66b3", "Azul marino":"#1e2f57", "Rojo":"#c0392b",
+  "Verde":"#3f8f5c", "Beige":"#d8c3a0", "Café":"#7a5230", "Vino":"#7a1f3d", "Plata":"#c3c7cc", "Rosa":"#e58ca6", "Nude":"#d9a58f",
+  "Coral":"#f26b5b", "Berry":"#8e2a5a" };
+const hex = c => COLOR_HEX[c] || "#bbb";
 const esc = t => String(t).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 /* Ícono de carrito reutilizable dentro de los botones "Agregar al carrito" */
@@ -24,6 +28,8 @@ const state = {
   page: 1,
   minRating: 0,
   sort: "relevance",
+  size: "",
+  color: "",
 };
 
 /* ---------------------- CUENTAS ----------------------
@@ -37,7 +43,11 @@ function saveAccounts(accounts){ localStorage.setItem("mv_accounts", JSON.string
 function cartKeyFor(email){ return "mv_cart_" + (email || "guest"); }
 
 function loadCartFor(email){
-  try{ return (JSON.parse(localStorage.getItem(cartKeyFor(email))) || []).filter(i => i && i.name); }catch(e){ return []; }
+  try{ return normalizeCart(JSON.parse(localStorage.getItem(cartKeyFor(email))) || []); }catch(e){ return []; }
+}
+const itemKey = (id, size, color) => [id, size || "", color || ""].join("|");
+function normalizeCart(list){
+  return list.filter(i => i && i.name).map(i => ({ ...i, size: i.size || "", color: i.color || "", key: i.key || itemKey(i.id, i.size, i.color) }));
 }
 function saveCart(){
   localStorage.setItem(cartKeyFor(currentUser ? currentUser.email : null), JSON.stringify(cart));
@@ -58,6 +68,7 @@ let activeProductId = null;
 
 /* Cambia de cuenta activa (o a invitado con email=null) y carga su carrito guardado */
 function switchToAccount(user){
+  const guestItems = !currentUser ? cart.slice() : [];   // carrito del invitado, para no perderlo al iniciar sesión
   currentUser = user;
   if(user){
     localStorage.setItem("mv_current_email", user.email);
@@ -65,6 +76,14 @@ function switchToAccount(user){
     localStorage.removeItem("mv_current_email");
   }
   cart = loadCartFor(user ? user.email : null);
+  if(user && guestItems.length){
+    guestItems.forEach(g => {
+      const ex = cart.find(i => i.key === g.key);
+      if(ex) ex.qty = Math.min(ex.qty + g.qty, g.stock || ex.qty + g.qty); else cart.push(g);
+    });
+    localStorage.removeItem(cartKeyFor(null));
+    saveCart();
+  }
   updateLoginUI();
   renderCartBadge();
   renderCartDrawer();
@@ -212,6 +231,8 @@ function buildParams(page){
   if(state.onlyStock) p.set("inStock", "true");
   if(state.maxPrice < MAX_PRICE) p.set("maxPrice", state.maxPrice);
   if(state.minRating > 0) p.set("minRating", state.minRating);
+  if(state.size) p.set("size", state.size);
+  if(state.color) p.set("color", state.color);
   p.set("sort", state.sort);
   p.set("page", page);
   return p;
@@ -279,6 +300,7 @@ function productCard(p, hlQuery){
         <span class="stars__icons" aria-hidden="true">${starString(p.rating)}</span>
         <span>${p.rating.toFixed(1)} (${p.ratingCount + (reviews[p.id]?.length || 0)})</span>
       </div>
+      ${p.colors && p.colors.length ? `<div class="swatches" aria-label="Colores disponibles">${p.colors.map(c => `<span class="swatch" style="background:${hex(c)}" title="${esc(c)}"></span>`).join("")}${p.sizes && p.sizes.length ? `<span class="sizes-hint">${esc(p.sizeLabel)}: ${esc(p.sizes[0])}–${esc(p.sizes[p.sizes.length - 1])}</span>` : ""}</div>` : ""}
       <div class="product-card__price-row">
         <span class="product-card__price">${formatPrice(p.price)}</span>
         <span class="product-card__stock ${outOfStock ? "product-card__stock--out" : lowStock ? "product-card__stock--low" : ""}">
@@ -287,9 +309,10 @@ function productCard(p, hlQuery){
       </div>
     </div>
     <div class="product-card__actions">
-      <button class="btn btn--primary btn--full" data-add="${p.id}" ${outOfStock ? "disabled" : ""}>
-        ${outOfStock ? "Agotado" : `${CART_ICON_SVG} Agregar al carrito`}
-      </button>
+      ${outOfStock ? `<button class="btn btn--primary btn--full" disabled>Agotado</button>`
+        : (p.colors && p.colors.length) || (p.sizes && p.sizes.length)
+          ? `<button class="btn btn--secondary btn--full" data-open="${p.id}">Elegir ${p.sizes && p.sizes.length ? "talla y " : ""}color</button>`
+          : `<button class="btn btn--primary btn--full" data-add="${p.id}">${CART_ICON_SVG} Agregar al carrito</button>`}
     </div>
   </article>`;
 }
@@ -440,41 +463,35 @@ function setupSearch(){
 /* =========================================================
    CARRITO
    ========================================================= */
-function addToCart(productId, qty = 1){
+const unitsOf = id => cart.filter(i => String(i.id) === String(id)).reduce((n, i) => n + i.qty, 0);
+
+function addToCart(productId, qty = 1, opts = {}){
   const product = getProduct(productId);
-  if(!product || product.stock <= 0) return;
+  if(!product || product.stock <= 0) return false;
+  const size = opts.size || "", color = opts.color || "", key = itemKey(productId, size, color);
 
-  const existing = cart.find(item => item.id === productId);
-  const currentQty = existing ? existing.qty : 0;
-
-  if(currentQty + qty > product.stock){
+  if(unitsOf(productId) + qty > product.stock){
     showToast(`Solo quedan ${product.stock} de "${product.name}" en existencia.`, { isError: true });
-    return;
+    return false;
   }
-
+  const existing = cart.find(item => item.key === key);
   if(existing){ existing.qty += qty; }
-  else{ cart.push({ id: productId, qty, name: product.name, price: product.price, image: product.image, stock: product.stock, category: product.category }); }
+  else{ cart.push({ id: productId, key, size, color, qty, name: product.name, price: product.price, image: product.image, stock: product.stock, category: product.category, sizeLabel: product.sizeLabel, colorLabel: product.colorLabel }); }
 
   saveCart();
   renderCartBadge();
   renderCartDrawer();
-  showToast(`"${product.name}" se agregó al carrito.`, {
-    actionLabel: "Ver carrito",
-    onAction: openCart
-  });
+  showToast(`"${product.name}" se agregó al carrito.`, { actionLabel: "Ver carrito", onAction: openCart });
+  return true;
 }
 
-function updateQty(productId, delta){
-  const item = cart.find(i => i.id === productId);
+function updateQty(key, delta){
+  const item = cart.find(i => i.key === key);
   if(!item) return;
-  const product = getProduct(productId);
+  const product = getProduct(item.id);
   const newQty = item.qty + delta;
-
-  if(newQty <= 0){
-    removeFromCart(productId, { silent: true });
-    return;
-  }
-  if(newQty > product.stock){
+  if(newQty <= 0){ removeFromCart(key, { silent: true }); return; }
+  if(unitsOf(item.id) + delta > product.stock){
     showToast(`Solo hay ${product.stock} unidades disponibles.`, { isError: true });
     return;
   }
@@ -484,23 +501,16 @@ function updateQty(productId, delta){
   renderCartDrawer();
 }
 
-function removeFromCart(productId, { silent } = {}){
-  const removedItem = cart.find(i => i.id === productId);
-  const product = getProduct(productId);
-  cart = cart.filter(i => i.id !== productId);
+function removeFromCart(key, { silent } = {}){
+  const removedItem = cart.find(i => i.key === key);
+  cart = cart.filter(i => i.key !== key);
   saveCart();
   renderCartBadge();
   renderCartDrawer();
-
   if(!silent && removedItem){
-    showToast(`Se quitó "${product.name}" del carrito.`, {
+    showToast(`Se quitó "${removedItem.name}" del carrito.`, {
       actionLabel: "Deshacer",
-      onAction: () => {
-        cart.push(removedItem);
-        saveCart();
-        renderCartBadge();
-        renderCartDrawer();
-      }
+      onAction: () => { cart.push(removedItem); saveCart(); renderCartBadge(); renderCartDrawer(); }
     });
   }
 }
@@ -527,9 +537,10 @@ function renderCartBadge(){
   document.getElementById("cartBadge").textContent = cartCount();
 }
 
+const variantText = i => [i.size && `${i.sizeLabel || "Talla"}: ${i.size}`, i.color && `${i.colorLabel || "Color"}: ${i.color}`].filter(Boolean).join(" · ");
+
 function renderCartDrawer(){
   const body = document.getElementById("cartBody");
-  const subtotalEl = document.getElementById("cartSubtotal");
   const checkoutBtn = document.getElementById("checkoutBtn");
 
   if(cart.length === 0){
@@ -544,31 +555,99 @@ function renderCartDrawer(){
       <div class="cart-item">
         <img src="${p.image}" alt="${esc(p.name)}" width="64" height="64" ${IMG_ERR}>
         <div class="cart-item__info">
-          <div class="cart-item__name">${p.name}</div>
+          <div class="cart-item__name">${esc(p.name)}</div>
+          ${variantText(item) ? `<div class="cart-item__variant">${esc(variantText(item))}</div>` : ""}
           <div class="cart-item__price">${formatPrice(p.price)} c/u</div>
           <div class="qty-control">
-            <button data-dec="${p.id}" aria-label="Quitar una unidad de ${p.name}">−</button>
+            <button data-dec="${esc(item.key)}" aria-label="Quitar una unidad de ${esc(p.name)}">−</button>
             <span aria-live="polite">${item.qty}</span>
-            <button data-inc="${p.id}" aria-label="Agregar una unidad de ${p.name}">+</button>
+            <button data-inc="${esc(item.key)}" aria-label="Agregar una unidad de ${esc(p.name)}">+</button>
           </div>
         </div>
-        <button class="cart-item__remove" data-remove="${p.id}" aria-label="Eliminar ${p.name} del carrito" title="Eliminar">
+        <button class="cart-item__remove" data-remove="${esc(item.key)}" aria-label="Eliminar ${esc(p.name)} del carrito" title="Eliminar">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="3 6 5 6 21 6"/>
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-            <path d="M10 11v6"/><path d="M14 11v6"/>
-            <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            <path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
           </svg>
         </button>
       </div>`;
     }).join("");
   }
 
-  subtotalEl.textContent = formatPrice(cartSubtotal());
-
+  document.getElementById("cartSubtotal").textContent = formatPrice(cartSubtotal());
   body.querySelectorAll("[data-inc]").forEach(b => b.addEventListener("click", () => updateQty(b.dataset.inc, 1)));
   body.querySelectorAll("[data-dec]").forEach(b => b.addEventListener("click", () => updateQty(b.dataset.dec, -1)));
   body.querySelectorAll("[data-remove]").forEach(b => b.addEventListener("click", () => removeFromCart(b.dataset.remove)));
+  refreshShipping();
+}
+
+/* ---------------- Envío (costo según la distancia) y compra ---------------- */
+let quoteSeq = 0, pendingCheckout = false;
+
+async function refreshShipping(){
+  const shipEl = $("cartShipping"), info = $("shipInfo"), totEl = $("cartTotal"), edit = $("editAddressBtn");
+  const sub = cartSubtotal(), seq = ++quoteSeq;
+  edit.hidden = !currentUser;
+  if(!cart.length){ shipEl.textContent = "—"; info.textContent = "Agrega productos para calcular tu envío."; totEl.textContent = formatPrice(0); return; }
+  if(!currentUser){
+    shipEl.textContent = "Pendiente";
+    info.textContent = "Tu carrito se guarda. Al finalizar la compra te pediremos iniciar sesión para calcular el envío a tu domicilio.";
+    totEl.textContent = formatPrice(sub);
+    return;
+  }
+  shipEl.textContent = "Calculando…";
+  try{
+    const r = await fetch(`${API}/quote`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: cart.map(({ id, qty, size, color }) => ({ id, qty, size, color })), city: currentUser.city, state: currentUser.state }) });
+    const d = await r.json();
+    if(seq !== quoteSeq) return;
+    if(!d.ok){ shipEl.textContent = "—"; info.textContent = d.error; totEl.textContent = formatPrice(sub); return; }
+    shipEl.textContent = formatPrice(d.shipping.cost);
+    info.textContent = `Envío a ${d.shipping.place} (${d.shipping.km <= 15 ? "entrega local" : "≈ " + d.shipping.km + " km"}) · llega en ${d.shipping.days}.`;
+    totEl.textContent = formatPrice(d.total);
+  }catch(e){
+    if(seq !== quoteSeq) return;
+    shipEl.textContent = "—"; info.textContent = "No pudimos calcular el envío. Revisa tu conexión."; totEl.textContent = formatPrice(sub);
+  }
+}
+
+async function checkout(){
+  if(!currentUser){
+    pendingCheckout = true;
+    closeCart();
+    showToast("Inicia sesión para finalizar tu compra. Tu carrito se conserva.", { isError: true });
+    openLoginModal();
+    return;
+  }
+  const btn = $("checkoutBtn");
+  btn.disabled = true; btn.textContent = "Procesando…";
+  try{
+    const r = await fetch(`${API}/orders`, { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customer: currentUser, items: cart.map(({ id, qty, size, color }) => ({ id, qty, size, color })) }) });
+    const d = await r.json();
+    if(!r.ok){ showToast(d.error || "No pudimos procesar tu pedido.", { isError: true }); return; }
+    cart = []; saveCart(); renderCartBadge(); renderCartDrawer();
+    showOrderConfirmation(d);
+  }catch(e){ showToast("No pudimos conectar con la tienda. Intenta de nuevo.", { isError: true }); }
+  finally{ btn.textContent = "Finalizar compra"; btn.disabled = cart.length === 0; }
+}
+
+function showOrderConfirmation(o){
+  $("cartBody").innerHTML = `
+    <div class="order-ok">
+      <div class="order-ok__icon">✓</div>
+      <h3>¡Pedido confirmado!</h3>
+      <p>Folio <strong>${esc(o.folio)}</strong></p>
+      <ul class="order-ok__list">${o.items.map(i => `<li><span>${i.qty} × ${esc(i.name)}${i.size || i.color ? `<small>${esc([i.size, i.color].filter(Boolean).join(" · "))}</small>` : ""}</span><span>${formatPrice(i.total)}</span></li>`).join("")}</ul>
+      <div class="cart-total-row"><span>Subtotal</span><strong>${formatPrice(o.subtotal)}</strong></div>
+      <div class="cart-total-row"><span>Envío (${o.shipping.km <= 15 ? "local" : "≈ " + o.shipping.km + " km"})</span><strong>${formatPrice(o.shipping.cost)}</strong></div>
+      <div class="cart-total-row cart-total-row--grand"><span>Total</span><strong>${formatPrice(o.total)}</strong></div>
+      <p class="cart-hint">Se enviará a: ${esc(o.address)}, ${esc(o.shipping.place)}.<br>Llegada estimada: <strong>${esc(o.shipping.days)}</strong>.</p>
+      <button class="btn btn--primary btn--full" id="orderDoneBtn">Seguir comprando</button>
+    </div>`;
+  $("cartShipping").textContent = "—"; $("cartTotal").textContent = formatPrice(0);
+  $("shipInfo").textContent = "Gracias por tu compra.";
+  $("orderDoneBtn").addEventListener("click", closeCart);
 }
 
 /* Cierra cualquier panel/modal que esté abierto (evita tener dos a la vez) */
@@ -652,6 +731,12 @@ function handleLoginSubmit(e){
 
   switchToAccount(data);
   closeLoginModal();
+  if(pendingCheckout){
+    pendingCheckout = false;
+    openCart();
+    showToast(`¡Listo, ${data.fullName.split(" ")[0]}! Tu carrito se conservó. Revisa el envío y finaliza tu compra.`);
+    return;
+  }
   showToast(isNewAccount
     ? `¡Bienvenido/a, ${data.fullName.split(" ")[0]}! Guardamos tu domicilio para tus envíos.`
     : `¡Qué bueno verte de nuevo, ${data.fullName.split(" ")[0]}!`);
@@ -719,6 +804,11 @@ function openProductModal(productId){
         </div>
         <div class="product-detail__price">${formatPrice(p.price)}</div>
         <p class="product-detail__desc">${p.description}</p>
+        ${p.sizes && p.sizes.length ? `<div class="opt-group"><div class="opt-label">${esc(p.sizeLabel)}: <strong id="sizeChosen">elige una</strong></div>
+          <div class="opt-row" id="sizePicker" role="radiogroup">${p.sizes.map(z => `<button type="button" class="opt-btn" role="radio" aria-checked="false" data-size="${esc(z)}">${esc(z)}</button>`).join("")}</div></div>` : ""}
+        ${p.colors && p.colors.length ? `<div class="opt-group"><div class="opt-label">${esc(p.colorLabel || "Color")}: <strong id="colorChosen">elige uno</strong></div>
+          <div class="opt-row" id="colorPicker" role="radiogroup">${p.colors.map(c => `<button type="button" class="opt-swatch" role="radio" aria-checked="false" aria-label="${esc(c)}" title="${esc(c)}" data-color="${esc(c)}" style="--c:${hex(c)}"></button>`).join("")}</div></div>` : ""}
+        <p class="error-msg" id="optError"></p>
         <p class="product-card__stock ${outOfStock ? "product-card__stock--out" : ""}">${outOfStock ? "Sin existencia por ahora" : `${p.stock} piezas disponibles`}</p>
         <button class="btn btn--primary btn--full" id="modalAddBtn" ${outOfStock ? "disabled" : ""}>
           ${outOfStock ? "Agotado" : `${CART_ICON_SVG} Agregar al carrito`}
@@ -757,8 +847,22 @@ function openProductModal(productId){
   `;
 
   selectedStars = 0;
+  const chosen = { size: "", color: "" };
+  const pick = (rowId, attr, labelId, key) => {
+    const row = $(rowId); if(!row) return;
+    row.addEventListener("click", e => {
+      const b = e.target.closest("button"); if(!b) return;
+      chosen[key] = b.dataset[attr];
+      row.querySelectorAll("button").forEach(x => { const on = x === b; x.classList.toggle("selected", on); x.setAttribute("aria-checked", on); });
+      $(labelId).textContent = chosen[key]; $("optError").textContent = "";
+    });
+  };
+  pick("sizePicker", "size", "sizeChosen", "size");
+  pick("colorPicker", "color", "colorChosen", "color");
   document.getElementById("modalAddBtn")?.addEventListener("click", () => {
-    addToCart(productId);
+    if(p.sizes && p.sizes.length && !chosen.size){ $("optError").textContent = `Elige tu ${(p.sizeLabel || "talla").toLowerCase()} para continuar.`; return; }
+    if(p.colors && p.colors.length && !chosen.color){ $("optError").textContent = `Elige un ${(p.colorLabel || "color").toLowerCase()} para continuar.`; return; }
+    addToCart(productId, 1, chosen);
   });
 
   const starPicker = document.getElementById("starPicker");
@@ -842,7 +946,16 @@ function closeCategoryDrawer(){
 /* =========================================================
    INICIALIZACIÓN Y EVENTOS GLOBALES
    ========================================================= */
+async function loadPlaces(){
+  try{
+    const d = await (await fetch(`${API}/shipping/places`)).json();
+    $("statesList").innerHTML = d.states.map(x => `<option value="${esc(x)}">`).join("");
+    $("citiesList").innerHTML = d.cities.map(x => `<option value="${esc(x)}">`).join("");
+  }catch(e){}
+}
+
 async function init(){
+  loadPlaces();
   try{ CATEGORIES = (await (await fetch(`${API}/categories`)).json()).map(c => c.name); }catch(e){ CATEGORIES = []; }
   renderCategoryBar();
   renderRatingFilters();
@@ -869,6 +982,9 @@ async function init(){
     state.sort = e.target.value;
     renderProducts();
   });
+  $("sizeFilter").addEventListener("change", e => { state.size = e.target.value; renderProducts(); });
+  $("colorFilter").innerHTML = '<option value="">Todos</option>' + Object.keys(COLOR_HEX).map(c => `<option>${c}</option>`).join("");
+  $("colorFilter").addEventListener("change", e => { state.color = e.target.value; renderProducts(); });
   document.getElementById("clearFilters").addEventListener("click", resetFilters);
   document.getElementById("emptyState").addEventListener("click", handleEmptyClick);
   document.getElementById("loadMore").addEventListener("click", () => loadProducts(false));
@@ -878,20 +994,8 @@ async function init(){
   document.getElementById("closeCart").addEventListener("click", () => { closeCart(); document.getElementById("cartToggle").focus(); });
   document.getElementById("cartOverlay").addEventListener("click", closeCart);
   document.getElementById("clearCartBtn").addEventListener("click", clearCart);
-  document.getElementById("checkoutBtn").addEventListener("click", () => {
-    if(!currentUser){
-      closeCart();
-      showToast("Inicia sesión para guardar tu domicilio antes de finalizar la compra.", { isError: true });
-      openLoginModal();
-      return;
-    }
-    showToast(`¡Gracias por tu compra, ${currentUser.fullName.split(" ")[0]}! Se enviará a ${currentUser.street}, ${currentUser.neighborhood}.`);
-    cart = [];
-    saveCart();
-    renderCartBadge();
-    renderCartDrawer();
-    closeCart();
-  });
+  $("checkoutBtn").addEventListener("click", checkout);
+  $("editAddressBtn").addEventListener("click", openLoginModal);
 
   // Login
   document.getElementById("loginBtn").addEventListener("click", openLoginModal);
@@ -927,7 +1031,9 @@ function resetFilters(){
   state.maxPrice = MAX_PRICE;
   state.minRating = 0;
   state.sort = "relevance";
+  state.size = ""; state.color = "";
 
+  $("sizeFilter").value = ""; $("colorFilter").value = "";
   document.getElementById("searchInput").value = "";
   hideSuggest();
   document.getElementById("onlyStock").checked = false;

@@ -103,6 +103,21 @@
     </fieldset>
 
     <fieldset class="filter-group">
+      <legend>Talla / número</legend>
+      <select id="sizeFilter" aria-label="Filtrar por talla">
+        <option value="">Todas</option>
+        <optgroup label="Ropa"><option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option></optgroup>
+        <optgroup label="Pantalón"><option>28</option><option>30</option><option>32</option><option>34</option><option>36</option><option>38</option></optgroup>
+        <optgroup label="Calzado (cm)"><option>22</option><option>23</option><option>24</option><option>25</option><option>26</option><option>27</option><option>28</option><option>29</option><option>30</option></optgroup>
+      </select>
+    </fieldset>
+
+    <fieldset class="filter-group">
+      <legend>Color</legend>
+      <select id="colorFilter" aria-label="Filtrar por color"><option value="">Todos</option></select>
+    </fieldset>
+
+    <fieldset class="filter-group">
       <legend>Ordenar por</legend>
       <select id="sortSelect">
         <option value="relevance">Relevancia</option>
@@ -155,8 +170,11 @@
       <span>Subtotal</span>
       <strong id="cartSubtotal">$0.00</strong>
     </div>
-    <p class="cart-hint">Envío e impuestos se calculan al finalizar la compra.</p>
+    <div class="cart-total-row"><span>Envío</span><strong id="cartShipping">—</strong></div>
+    <p class="cart-hint" id="shipInfo">Agrega productos para calcular tu envío.</p>
+    <div class="cart-total-row cart-total-row--grand"><span>Total</span><strong id="cartTotal">$0.00</strong></div>
     <button class="btn btn--primary btn--full" id="checkoutBtn">Finalizar compra</button>
+    <button class="link-btn" id="editAddressBtn" hidden>Cambiar domicilio de envío</button>
     <button class="link-btn" id="clearCartBtn">Vaciar carrito</button>
   </div>
 </aside>
@@ -211,12 +229,12 @@
     <div class="form-grid">
       <div class="form-row">
         <label for="city">Ciudad</label>
-        <input type="text" id="city" name="city" required autocomplete="address-level2">
+        <input type="text" id="city" name="city" required autocomplete="address-level2" list="citiesList">
         <span class="error-msg" id="err-city"></span>
       </div>
       <div class="form-row">
         <label for="state">Estado</label>
-        <input type="text" id="state" name="state" required autocomplete="address-level1">
+        <input type="text" id="state" name="state" required autocomplete="address-level1" list="statesList">
         <span class="error-msg" id="err-state"></span>
       </div>
     </div>
@@ -246,6 +264,9 @@
   </div>
   <ul id="categoryListMobile" class="category-drawer__list"></ul>
 </aside>
+
+<datalist id="statesList"></datalist>
+<datalist id="citiesList"></datalist>
 
 <script src="script.js"></script>
 </body>

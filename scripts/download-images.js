@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const Database = require("../db/sqlite");
-const { seed, DB_PATH } = require("../db/seed");
+const { ensure, DB_PATH } = require("../db/seed");
 
 const envFile = path.join(__dirname, "..", ".env");
 if (fs.existsSync(envFile)) for (const l of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
@@ -16,7 +16,7 @@ if (!KEY) { console.error("✖ Falta PIXABAY_KEY. Crea un archivo .env con: PIXA
 const OUT = path.join(__dirname, "..", "public", "images");
 const USED_FILE = path.join(__dirname, "..", "data", "images_used.json");
 fs.mkdirSync(OUT, { recursive: true });
-if (!fs.existsSync(DB_PATH)) seed();
+ensure();
 
 const db = new Database(DB_PATH, { readonly: true });
 const products = db.prepare("SELECT id, name, img_query, img_fallback FROM products ORDER BY id").all();

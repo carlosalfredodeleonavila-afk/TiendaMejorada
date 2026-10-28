@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const Database = require("./sqlite");
 const catalog = require("./catalog");
+const { variantsFor } = require("./variants");
 
 const DB_PATH = path.join(__dirname, "..", "data", "store.db");
 const BRANDS = ["Sonix","Vantra","Nuvia","Kalor","Zentra","Orbis","Tavo","Lumina","Brisa","Norte","Kyra","Alba","Volta","Mirto","Axial","Pulsar","Ámbar","Delta","Selva","Cobalto","Nimbo","Aurea","Terra","Zafiro","Fénix","Argos","Ciclo","Rumbo"];
@@ -35,7 +36,8 @@ function buildProducts(){
           rating: Math.round((3.4 + rand() * 1.5) * 10) / 10,
           rating_count: 8 + Math.floor(rand() * 470),
           image: `/images/${id}.jpg`,
-          img_query: query, img_fallback: def.imgQuery
+          img_query: query, img_fallback: def.imgQuery,
+          ...variantsFor(category, typeName, id)
         });
         id++;
       }
@@ -52,14 +54,23 @@ function seed(){
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL, type TEXT, brand TEXT,
     description TEXT NOT NULL, price REAL NOT NULL, stock INTEGER NOT NULL,
     rating REAL NOT NULL, rating_count INTEGER NOT NULL, image TEXT NOT NULL,
-    img_query TEXT, img_fallback TEXT);
+    img_query TEXT, img_fallback TEXT,
+    size_label TEXT, sizes TEXT, color_label TEXT, colors TEXT);
     CREATE INDEX idx_cat ON products(category); CREATE INDEX idx_price ON products(price);`);
-  const ins = db.prepare(`INSERT INTO products VALUES (@id,@name,@category,@type,@brand,@description,@price,@stock,@rating,@rating_count,@image,@img_query,@img_fallback)`);
+  const ins = db.prepare(`INSERT INTO products VALUES (@id,@name,@category,@type,@brand,@description,@price,@stock,@rating,@rating_count,@image,@img_query,@img_fallback,@size_label,@sizes,@color_label,@colors)`);
   const products = buildProducts();
   db.transaction(rows => rows.forEach(r => ins.run(r)))(products);
   db.close();
   return products.length;
 }
 
-module.exports = { seed, DB_PATH, buildProducts };
+// Crea la base si no existe, o la regenera si es de una versión anterior (sin tallas/colores).
+function ensure(){
+  if (!fs.existsSync(DB_PATH)) return seed();
+  const db = new Database(DB_PATH, { readonly: true });
+  const cols = db.prepare("PRAGMA table_info(products)").all().map(c => c.name);
+  db.close();
+  if (!cols.includes("colors")) return seed();
+}
+module.exports = { seed, ensure, DB_PATH, buildProducts };
 if (require.main === module) console.log(`✔ Base de datos creada con ${seed()} productos en data/store.db`);
