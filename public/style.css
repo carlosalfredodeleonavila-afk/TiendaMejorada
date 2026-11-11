@@ -503,3 +503,7 @@ a{ color: inherit; }
 .order-ok__list small{ display:block; color: var(--ink-soft); }
 .order-ok .cart-total-row{ text-align:left; }
 .order-ok .btn{ margin-top: 12px; }
+
+/* Código postal */
+.zip-hint{ display:block; font-size:0.8rem; color: var(--petrol); margin-top:4px; min-height:0; }
+.zip-hint--bad{ color:#B8384A; }

@@ -5,6 +5,11 @@ const Database = require("./db/sqlite");
 const { ensure, DB_PATH } = require("./db/seed");
 const shipping = require("./lib/shipping");
 const shop = require("./lib/shop");
+const cp = require("./lib/cp");
+const mail = require("./lib/mail");
+const admin = require("./lib/admin");
+const { seedDemoOrders } = require("./lib/demo");
+const crypto = require("crypto");
 const { buildIndex, parseQuery, rank, norm } = require("./search");
 
 ensure();
@@ -18,6 +23,10 @@ const toApi = r => ({ id: String(r.id), name: r.name, category: r.category, pric
   sizeLabel: r.size_label, sizes: r.sizes ? r.sizes.split(",") : [], colorLabel: r.color_label, colors: r.colors ? r.colors.split(",") : [] });
 
 const ordersDb = shop.openOrders();
+// Si no hay ningún pedido, se crean pedidos de demostración (marcados como demo) para que el dashboard tenga datos
+if (process.env.DEMO_ORDERS !== "off" && ordersDb.prepare("SELECT COUNT(*) AS n FROM orders").get().n === 0) {
+  console.log(`Pedidos de demostración creados: ${seedDemoOrders(db, ordersDb, 120)}`);
+}
 const app = express();
 app.use(express.json({ limit: "100kb" }));
 app.use(express.static(path.join(__dirname, "public")));
@@ -78,22 +87,39 @@ app.get("/api/suggest", (req, res) => {
 });
 
 // ---- Envíos y compra ----
-app.get("/api/shipping/places", (req, res) => res.json(shipping.places()));
+app.get("/api/cp/:cp", (req, res) => {
+  if (!cp.available()) return res.status(503).json({ ok: false, error: "Catálogo de códigos postales no disponible." });
+  const i = cp.lookup(req.params.cp);
+  if (!i) return res.status(404).json({ ok: false, error: "No encontramos ese código postal." });
+  res.json({ ok: true, zip: req.params.cp, estado: i.e, municipio: i.m, ciudad: i.c || i.m, colonias: i.a });
+});
 app.get("/api/shipping", (req, res) => {
-  const r = shipping.quote(req.query.city, req.query.state);
+  const r = shipping.quote({ zip: req.query.zip, city: req.query.city, state: req.query.state });
   res.status(r.ok ? 200 : 422).json(r);
 });
 // Calcula subtotal, envío y total con precios reales de la base de datos
 app.post("/api/quote", (req, res) => {
   const b = req.body || {};
-  const r = shop.priceCart(db, b.items, b.city, b.state);
+  const r = shop.priceCart(db, b.items, { zip: b.zip, city: b.city, state: b.state });
   res.status(r.ok ? 200 : 422).json(r);
 });
-// Confirma el pedido y lo guarda en data/orders.db
+// Confirma el pedido, lo guarda en data/orders.db y avisa por correo al dueño de la tienda
 app.post("/api/orders", (req, res) => {
   const r = shop.createOrder(db, ordersDb, req.body || {});
-  res.status(r.ok ? 201 : r.status).json(r);
+  if (r.ok) mail.sendOrderEmail(r).catch(e => console.error("[correo]", e.message));   // no hace esperar al cliente
+  res.status(r.ok ? 201 : r.status).json(r.ok ? { ...r, customer: undefined } : r);
 });
+
+// ---- Dashboard (protegido con contraseña) ----
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "localstore2026";
+if (!process.env.ADMIN_PASSWORD) console.warn("⚠ Dashboard con la contraseña por defecto. Define la variable ADMIN_PASSWORD (también en Render).");
+const sha = x => crypto.createHash("sha256").update(String(x)).digest();
+app.get("/api/admin/kpis", (req, res) => {
+  const given = req.headers["x-admin-password"] || "";
+  if (!crypto.timingSafeEqual(sha(given), sha(ADMIN_PASSWORD))) return res.status(401).json({ ok: false, error: "Contraseña incorrecta." });
+  res.json(admin.computeKpis(db, ordersDb, { demo: req.query.demo !== "0" }));
+});
+app.get("/admin", (req, res) => res.sendFile(path.join(__dirname, "public", "admin.html")));
 
 app.get("/api/health", (req, res) => res.json({ ok: true, products: ALL.length }));
 

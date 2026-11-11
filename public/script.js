@@ -598,7 +598,7 @@ async function refreshShipping(){
   shipEl.textContent = "Calculando…";
   try{
     const r = await fetch(`${API}/quote`, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: cart.map(({ id, qty, size, color }) => ({ id, qty, size, color })), city: currentUser.city, state: currentUser.state }) });
+      body: JSON.stringify({ items: cart.map(({ id, qty, size, color }) => ({ id, qty, size, color })), zip: currentUser.zip, city: currentUser.city, state: currentUser.state }) });
     const d = await r.json();
     if(seq !== quoteSeq) return;
     if(!d.ok){ shipEl.textContent = "—"; info.textContent = d.error; totEl.textContent = formatPrice(sub); return; }
@@ -689,13 +689,13 @@ function validateField(id, value){
     case "phone":
       return /^\d{10}$/.test(value.replace(/\s/g, "")) ? "" : "Escribe un teléfono a 10 dígitos.";
     case "zip":
-      return /^\d{4,5}$/.test(value.trim()) ? "" : "Escribe un código postal válido.";
+      return /^\d{5}$/.test(value.trim()) ? "" : "Escribe un código postal de 5 dígitos.";
     default:
       return value.trim().length >= 2 ? "" : "Este campo es obligatorio.";
   }
 }
 
-function handleLoginSubmit(e){
+async function handleLoginSubmit(e){
   e.preventDefault();
   const form = e.target;
   let hasError = false;
@@ -715,6 +715,15 @@ function handleLoginSubmit(e){
       errEl.textContent = "";
     }
   });
+
+  if(!hasError){
+    const info = await lookupZip(data.zip);
+    if(!info){
+      hasError = true;
+      $("zip").setAttribute("aria-invalid", "true");
+      $("err-zip").textContent = "No encontramos ese código postal. Revísalo, por favor.";
+    }
+  }
 
   if(hasError){
     showToast("Revisa los campos marcados en rojo.", { isError: true });
@@ -769,6 +778,7 @@ function openLoginModal(){
   document.getElementById("loginOverlay").hidden = false;
   document.getElementById("loginModal").hidden = false;
   prefillLoginForm();
+  applyZip();
   document.getElementById("fullName").focus();
   document.body.style.overflow = "hidden";
 }
@@ -946,16 +956,38 @@ function closeCategoryDrawer(){
 /* =========================================================
    INICIALIZACIÓN Y EVENTOS GLOBALES
    ========================================================= */
-async function loadPlaces(){
+/* ---------------- Código postal: autocompleta ciudad, estado y colonias ---------------- */
+const zipCache = new Map();
+async function lookupZip(zip){
+  zip = String(zip || "").trim();
+  if(!/^\d{5}$/.test(zip)) return null;
+  if(zipCache.has(zip)) return zipCache.get(zip);
   try{
-    const d = await (await fetch(`${API}/shipping/places`)).json();
-    $("statesList").innerHTML = d.states.map(x => `<option value="${esc(x)}">`).join("");
-    $("citiesList").innerHTML = d.cities.map(x => `<option value="${esc(x)}">`).join("");
-  }catch(e){}
+    const r = await fetch(`${API}/cp/${zip}`);
+    if(r.status === 503) return { unavailable: true, colonias: [] };   // sin catálogo: se acepta y se usa ciudad/estado
+    const info = r.ok ? await r.json() : null;
+    zipCache.set(zip, info);
+    return info;
+  }catch(e){ return { unavailable: true, colonias: [] }; }
+}
+
+async function applyZip(){
+  const zip = $("zip").value.trim(), hint = $("zipHint");
+  hint.textContent = ""; hint.classList.remove("zip-hint--bad");
+  if(!/^\d{5}$/.test(zip)) return;
+  const info = await lookupZip(zip);
+  if($("zip").value.trim() !== zip) return;              // el usuario siguió escribiendo
+  if(!info){ hint.textContent = "No encontramos ese código postal."; hint.classList.add("zip-hint--bad"); return; }
+  if(info.unavailable) return;
+  $("city").value = info.ciudad; $("state").value = info.estado;
+  $("neighborhoodsList").innerHTML = info.colonias.map(c => `<option value="${esc(c)}">`).join("");
+  if(info.colonias.length === 1 || !$("neighborhood").value.trim()) $("neighborhood").value = info.colonias[0];
+  hint.textContent = `✓ ${info.municipio}, ${info.estado}`;
+  $("err-zip").textContent = ""; $("zip").removeAttribute("aria-invalid");
 }
 
 async function init(){
-  loadPlaces();
+  $("zip").addEventListener("input", applyZip);
   try{ CATEGORIES = (await (await fetch(`${API}/categories`)).json()).map(c => c.name); }catch(e){ CATEGORIES = []; }
   renderCategoryBar();
   renderRatingFilters();

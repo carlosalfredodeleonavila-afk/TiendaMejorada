@@ -144,6 +144,7 @@
   <div class="site-footer__inner">
     <p>© 2026 LocalStore — Compras rápidas, cerca de ti.</p>
     <button id="helpBtn" class="link-btn">¿Cómo funciona esta tienda?</button>
+    <a href="/admin" class="link-btn">Panel de ventas</a>
   </div>
 </footer>
 
@@ -216,25 +217,26 @@
     <div class="form-grid">
       <div class="form-row">
         <label for="neighborhood">Colonia</label>
-        <input type="text" id="neighborhood" name="neighborhood" required>
+        <input type="text" id="neighborhood" name="neighborhood" required list="neighborhoodsList" autocomplete="off">
         <span class="error-msg" id="err-neighborhood"></span>
       </div>
       <div class="form-row">
         <label for="zip">Código postal</label>
-        <input type="text" id="zip" name="zip" required inputmode="numeric" placeholder="87000">
+        <input type="text" id="zip" name="zip" required inputmode="numeric" maxlength="5" autocomplete="postal-code" placeholder="87000">
         <span class="error-msg" id="err-zip"></span>
+        <span class="zip-hint" id="zipHint"></span>
       </div>
     </div>
 
     <div class="form-grid">
       <div class="form-row">
         <label for="city">Ciudad</label>
-        <input type="text" id="city" name="city" required autocomplete="address-level2" list="citiesList">
+        <input type="text" id="city" name="city" required autocomplete="address-level2">
         <span class="error-msg" id="err-city"></span>
       </div>
       <div class="form-row">
         <label for="state">Estado</label>
-        <input type="text" id="state" name="state" required autocomplete="address-level1" list="statesList">
+        <input type="text" id="state" name="state" required autocomplete="address-level1">
         <span class="error-msg" id="err-state"></span>
       </div>
     </div>
@@ -265,8 +267,7 @@
   <ul id="categoryListMobile" class="category-drawer__list"></ul>
 </aside>
 
-<datalist id="statesList"></datalist>
-<datalist id="citiesList"></datalist>
+<datalist id="neighborhoodsList"></datalist>
 
 <script src="script.js"></script>
 </body>

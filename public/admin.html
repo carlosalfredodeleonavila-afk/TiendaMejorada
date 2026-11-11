@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel de ventas — LocalStore</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@600;700&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --paper:#FAF5E9; --white:#fff; --ink:#2B2620; --soft:#635A4C; --line:#E7DFCC; --petrol:#1E4F46; --mustard:#E3A230; --red:#B8384A; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Work Sans',system-ui,sans-serif; background:var(--paper); color:var(--ink); }
+  header{ background:var(--petrol); color:#fff; padding:16px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  header h1{ font-family:'Fraunces',serif; font-size:1.4rem; margin:0; }
+  header a, header button{ color:#fff; background:transparent; border:1px solid rgba(255,255,255,.5); border-radius:999px; padding:7px 14px; cursor:pointer; font:inherit; font-size:.88rem; text-decoration:none; }
+  main{ max-width:1100px; margin:0 auto; padding:22px 20px 60px; }
+  .gate{ max-width:380px; margin:70px auto; background:var(--white); border:1px solid var(--line); border-radius:14px; padding:26px; text-align:center; }
+  .gate h2{ font-family:'Fraunces',serif; margin-top:0; }
+  .gate input{ width:100%; padding:11px 12px; border:1.5px solid var(--line); border-radius:8px; font:inherit; margin:8px 0 12px; }
+  .btn{ background:var(--mustard); border:0; border-radius:999px; padding:11px 22px; font:inherit; font-weight:600; cursor:pointer; color:var(--ink); }
+  .err{ color:var(--red); font-size:.88rem; min-height:1.2em; }
+  .bar{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px; }
+  .bar label{ font-size:.92rem; display:flex; gap:8px; align-items:center; }
+  .note{ background:#FFF3D6; border-left:4px solid var(--mustard); padding:10px 14px; border-radius:6px; font-size:.88rem; margin-bottom:16px; }
+  .kpis{ display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:22px; }
+  .kpi{ background:var(--white); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .kpi small{ color:var(--soft); font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; }
+  .kpi strong{ display:block; font-family:'Fraunces',serif; font-size:1.55rem; margin-top:6px; color:var(--petrol); overflow-wrap:anywhere; }
+  .kpi span{ display:block; color:var(--soft); font-size:.82rem; margin-top:2px; }
+  .grid2{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; margin-bottom:22px; }
+  .card{ background:var(--white); border:1px solid var(--line); border-radius:12px; padding:18px; }
+  .card h3{ margin:0 0 14px; font-size:1rem; }
+  .hbar{ display:grid; grid-template-columns:130px 1fr 90px; gap:10px; align-items:center; margin:8px 0; font-size:.86rem; }
+  .hbar i{ display:block; height:14px; border-radius:7px; background:var(--petrol); }
+  .hbar b{ text-align:right; font-weight:600; }
+  .cols{ display:flex; align-items:flex-end; gap:6px; height:170px; }
+  .cols div{ flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; font-size:.68rem; color:var(--soft); }
+  .cols i{ display:block; width:100%; background:var(--mustard); border-radius:4px 4px 0 0; min-height:2px; }
+  table{ width:100%; border-collapse:collapse; font-size:.88rem; }
+  th,td{ text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); }
+  th{ color:var(--soft); font-weight:600; font-size:.78rem; text-transform:uppercase; }
+  td.n,th.n{ text-align:right; }
+  .tag{ background:#EDE6D3; border-radius:999px; padding:2px 8px; font-size:.7rem; color:var(--soft); }
+  .scroll{ overflow-x:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Panel de ventas · LocalStore</h1>
+  <div><a href="/">← Volver a la tienda</a> <button id="refresh" hidden>Actualizar</button></div>
+</header>
+<main>
+  <section class="gate" id="gate">
+    <h2>Acceso al panel</h2>
+    <p style="color:var(--soft);margin-top:0">Escribe la contraseña de administrador.</p>
+    <input type="password" id="pwd" placeholder="Contraseña" autocomplete="current-password">
+    <div class="err" id="gateErr"></div>
+    <button class="btn" id="enter">Entrar</button>
+  </section>
+
+  <section id="dash" hidden>
+    <div class="bar">
+      <label><input type="checkbox" id="demo" checked> Incluir pedidos de demostración</label>
+      <span id="counts" style="color:var(--soft);font-size:.86rem"></span>
+    </div>
+    <div class="note" id="demoNote" hidden>Los pedidos marcados como <b>demo</b> son datos de ejemplo generados automáticamente para mostrar el panel. Quita la casilla para ver solo pedidos reales.</div>
+
+    <div class="kpis" id="kpis"></div>
+    <div class="grid2">
+      <div class="card"><h3>Ventas por categoría</h3><div id="byCat"></div></div>
+      <div class="card"><h3>Ventas de los últimos 14 días</h3><div class="cols" id="byDay"></div></div>
+    </div>
+    <div class="card">
+      <h3>Pedidos recientes</h3>
+      <div class="scroll"><table><thead><tr><th>Folio</th><th>Fecha</th><th>Cliente</th><th>Destino</th><th class="n">Total</th></tr></thead><tbody id="recent"></tbody></table></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+const esc = t => String(t == null ? "" : t).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+const money = n => Number(n).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+let pwd = sessionStorage.getItem("ls_admin") || "";
+
+async function load(){
+  const r = await fetch("/api/admin/kpis?demo=" + ($("demo").checked ? "1" : "0"), { headers: { "x-admin-password": pwd } });
+  if (r.status === 401) { sessionStorage.removeItem("ls_admin"); $("gate").hidden = false; $("dash").hidden = true; $("refresh").hidden = true; $("gateErr").textContent = pwd ? "Contraseña incorrecta." : ""; return false; }
+  const d = await r.json();
+  $("gate").hidden = true; $("dash").hidden = false; $("refresh").hidden = false;
+  $("counts").textContent = `${d.realOrders} pedidos reales · ${d.demoOrders} de demostración`;
+  $("demoNote").hidden = !d.includesDemo || d.demoOrders === 0;
+  const k = d.kpis;
+  $("kpis").innerHTML = [
+    ["Ventas totales", money(k.sales), `${k.units} productos vendidos`],
+    ["Pedidos", k.orders, `Envío promedio ${money(k.avgShipping)}`],
+    ["Ticket promedio", money(k.avgTicket), "Gasto medio por pedido"],
+    ["Producto más vendido", k.topProduct ? esc(k.topProduct.name) : "—", k.topProduct ? k.topProduct.units + " unidades" : ""],
+    ["Estado con más pedidos", k.topState ? esc(k.topState.name) : "—", k.topState ? k.topState.orders + " pedidos" : ""],
+  ].map(([t, v, s]) => `<div class="kpi"><small>${t}</small><strong>${v}</strong><span>${s}</span></div>`).join("");
+  const max = Math.max(1, ...d.byCategory.map(c => c.total));
+  $("byCat").innerHTML = d.byCategory.map(c => `<div class="hbar"><span>${esc(c.name)}</span><i style="width:${Math.max(3, c.total / max * 100)}%"></i><b>${money(c.total)}</b></div>`).join("") || "<p>Sin datos.</p>";
+  const maxD = Math.max(1, ...d.days.map(x => x.total));
+  $("byDay").innerHTML = d.days.map(x => `<div title="${x.day}: ${money(x.total)}"><i style="height:${x.total / maxD * 85}%"></i>${x.day.slice(8)}</div>`).join("");
+  $("recent").innerHTML = d.recent.map(o => `<tr><td>${esc(o.folio)} ${o.demo ? '<span class="tag">demo</span>' : ""}</td><td>${new Date(o.date).toLocaleDateString("es-MX")}</td><td>${esc(o.name)}</td><td>${esc(o.place)}</td><td class="n">${money(o.total)}</td></tr>`).join("") || '<tr><td colspan="5">Aún no hay pedidos.</td></tr>';
+  return true;
+}
+$("enter").onclick = async () => { pwd = $("pwd").value; sessionStorage.setItem("ls_admin", pwd); await load(); };
+$("pwd").addEventListener("keydown", e => { if (e.key === "Enter") $("enter").click(); });
+$("demo").onchange = load; $("refresh").onclick = load;
+if (pwd) load();
+</script>
+</body>
+</html>

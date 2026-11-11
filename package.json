@@ -6,9 +6,12 @@
   "scripts": {
     "seed": "node db/seed.js",
     "images": "node scripts/download-images.js",
-    "start": "node server.js"
+    "start": "node --env-file-if-exists=.env server.js",
+    "cp": "node scripts/build-cp.js"
   },
-  "engines": { "node": ">=22.13" },
+  "engines": {
+    "node": ">=22.13"
+  },
   "dependencies": {
     "express": "^4.21.0"
   }
